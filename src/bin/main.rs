@@ -9,9 +9,15 @@
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Timer as ETimer};
 use esp_hal::clock::CpuClock;
-use esp_hal::timer::timg::TimerGroup;
+use esp_hal::etm::Etm;
+use esp_hal::gpio::etm::{self, Channels};
+use esp_hal::gpio::{self, Input, Level, Output, OutputConfig};
+use esp_hal::timer::{
+    Timer,
+    timg::{TimerGroup, etm::Tasks},
+};
 use panic_rtt_target as _;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
@@ -32,6 +38,19 @@ async fn main(spawner: Spawner) -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
+    let mut led = Output::new(peripherals.GPIO15, Level::High, OutputConfig::default());
+
+    let mut cap_driver = Output::new(peripherals.GPIO16, Level::High, OutputConfig::default());
+    // let cap_sense = Input::new(peripherals.GPIO18, gpio::InputConfig::default());
+    let gpio_ext = Channels::new(peripherals.GPIO_SD);
+    let cap_sense_event = gpio_ext
+        .channel0_event
+        .rising_edge(peripherals.GPIO18, etm::InputConfig::default());
+    let cap_timer = TimerGroup::new(peripherals.TIMG1).timer0;
+    let cap_timer_task = cap_timer.cnt_stop();
+    let etm = Etm::new(peripherals.ETM);
+    let _cap_timer_etm_channel = etm.channel0.setup(&cap_sense_event, &cap_timer_task);
+
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
 
@@ -42,7 +61,20 @@ async fn main(spawner: Spawner) -> ! {
 
     loop {
         info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
+        led.toggle();
+        critical_section::with(|_cs| {
+            cap_timer.start();
+            cap_timer.reset();
+            cap_driver.set_high();
+        });
+        ETimer::after(Duration::from_millis(100)).await;
+        info!(
+            "timer: {}",
+            cap_timer.now().duration_since_epoch().as_micros()
+        );
+        cap_driver.set_low();
+
+        // ETimer::after(Duration::from_secs(1)).await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.2.2/examples
