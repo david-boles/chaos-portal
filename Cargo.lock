@@ -108,10 +108,12 @@ dependencies = [
  "critical-section",
  "defmt 1.1.1",
  "embassy-executor",
+ "embassy-sync 0.8.0",
  "embassy-time",
  "embedded-test",
  "esp-bootloader-esp-idf",
  "esp-hal",
+ "esp-metadata-generated",
  "esp-rtos",
  "panic-rtt-target",
  "rtt-target",
@@ -1848,9 +1850,10 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vl53l1"
 version = "0.2.0"
-source = "git+https://github.com/dothanhtrung/vl53l1.git#26745b652e7c8aad1c03319e32b8552889bf6fbe"
+source = "git+https://github.com/david-boles/vl53l1.git#2e6aa57a522244e51781ba5ae112ea3f4240623e"
 dependencies = [
  "bitfield 0.14.0",
+ "defmt 1.1.1",
  "embedded-hal 1.0.0",
  "nb 1.1.0",
  "vl53l1-reg",
@@ -1859,7 +1862,7 @@ dependencies = [
 [[package]]
 name = "vl53l1-reg"
 version = "0.2.0"
-source = "git+https://github.com/dothanhtrung/vl53l1.git#26745b652e7c8aad1c03319e32b8552889bf6fbe"
+source = "git+https://github.com/david-boles/vl53l1.git#2e6aa57a522244e51781ba5ae112ea3f4240623e"
 dependencies = [
  "bitfield 0.14.0",
  "embedded-hal 1.0.0",
