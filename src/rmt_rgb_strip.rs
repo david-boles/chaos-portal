@@ -7,10 +7,10 @@ use critical_section::Mutex;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use esp_hal::gpio::{Level, Output};
+use esp_hal::interrupt;
 use esp_hal::interrupt::{InterruptHandler, Priority};
 use esp_hal::peripherals::{Interrupt, PCR, RMT};
 use esp_hal::rmt::PulseCode;
-use esp_hal::{handler, interrupt};
 use esp_metadata_generated::property;
 use panic_rtt_target as _;
 
@@ -78,12 +78,10 @@ impl RgbStrip {
             w.ch0_tx_end().bit(true);
             w.ch0_tx_err().bit(true)
         });
-        unsafe {
-            interrupt::bind_handler(
-                Interrupt::RMT,
-                InterruptHandler::new(rmt_handler, Priority::Priority1),
-            )
-        };
+        interrupt::bind_handler(
+            Interrupt::RMT,
+            InterruptHandler::new(rmt_handler, Priority::Priority1),
+        );
         interrupt::enable(Interrupt::RMT, Priority::Priority1);
 
         // Return

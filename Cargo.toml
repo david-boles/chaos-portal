@@ -32,6 +32,7 @@ rtt-target = { version = "0.6.2", features = ["defmt"] }
 critical-section = "1.2.0"
 static_cell = "2.1.1"
 vl53l1 = { git = "https://github.com/david-boles/vl53l1.git", version = "0.2.0" }
+# vl53l1 = { path = "../vl53l1/lib/vl53l1", version = "0.2.0" }
 embassy-sync = "0.8.0"
 esp-metadata-generated = { version = "0.5.3", features = ["esp32c6"] }
 
