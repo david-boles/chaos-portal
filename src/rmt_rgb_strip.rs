@@ -1,4 +1,4 @@
-//! Simple driver for the RMT peripheral that allows transmitting SK68XX/WS2812 data pulsetrains.
+//! Simple driver for the RMT peripheral that allows transmitting WS2812B data pulsetrains.
 
 use core::cell::RefCell;
 use core::panic;
@@ -15,6 +15,8 @@ use esp_metadata_generated::property;
 use panic_rtt_target as _;
 
 const HALF_RAM_SIZE_U32: usize = 2 * property!("rmt.channel_ram_size"); // We're using the RAM for all 4 channels
+
+const NS_PER_CLOCK: u16 = 50;
 
 // static DEBUG_PINS: Mutex<RefCell<Option<(Output, Output)>>> = Mutex::new(RefCell::new(None));
 static TRANSMISSION: Mutex<RefCell<Option<Transmission>>> = Mutex::new(RefCell::new(None));
@@ -35,7 +37,7 @@ impl RgbStrip {
         // Initialize clocks
         PCR::regs().rmt_sclk_conf().modify(|_, w| {
             unsafe { w.sclk_sel().bits(1) }; // PLL_F80M_CLK // TODO this was done later as a separate write
-            unsafe { w.sclk_div_num().bits(7) }; // + 1 = overall divisor of 8 => 10MHz clock
+            unsafe { w.sclk_div_num().bits(3) }; // + 1 = overall divisor of 4 => 20MHz clock => NS_PER_CLOCK = 50
             unsafe { w.sclk_div_a().bits(0) };
             unsafe { w.sclk_div_b().bits(0) }; // 0 => fractional divisor of 256 (w/numerator 0) XXX: this might have been referring to only the tx channel divider?
             w.sclk_en().bit(true)
@@ -194,8 +196,13 @@ impl<'a> Iterator for PulseIter {
                 } else {
                     PulseIterState::RmtEndTransmission
                 };
-                // > 200us in total.
-                Some(PulseCode::new(Level::Low, 1250, Level::Low, 1250))
+                // > 50us in total.
+                Some(PulseCode::new(
+                    Level::Low,
+                    30000 / NS_PER_CLOCK,
+                    Level::Low,
+                    30000 / NS_PER_CLOCK,
+                ))
             }
             PulseIterState::Data {
                 current_word,
@@ -220,10 +227,20 @@ impl<'a> Iterator for PulseIter {
                 // 1.2us < T = 1.3us
                 Some(if (current_word & next_mask) == 0 {
                     // 0.2us < T0H = 0.3us < 0.4us
-                    PulseCode::new(Level::High, 3, Level::Low, 10)
+                    PulseCode::new(
+                        Level::High,
+                        400 / NS_PER_CLOCK,
+                        Level::Low,
+                        850 / NS_PER_CLOCK,
+                    )
                 } else {
                     // 0.65us < T1H = 0.8us < 1us
-                    PulseCode::new(Level::High, 8, Level::Low, 5)
+                    PulseCode::new(
+                        Level::High,
+                        800 / NS_PER_CLOCK,
+                        Level::Low,
+                        450 / NS_PER_CLOCK,
+                    )
                 })
             }
             PulseIterState::RmtEndTransmission => {
