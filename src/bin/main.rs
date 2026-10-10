@@ -7,26 +7,31 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
+use chaos_portal::InputEvent;
+use chaos_portal::input_touch::run_touch;
 use chaos_portal::rmt_rgb_strip::RgbStrip;
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::{Delay, Instant};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::{Channel, DynamicReceiver};
+use embassy_time::{Delay, Duration, Timer};
 use esp_hal::clock::CpuClock;
-use esp_hal::etm::Etm;
-use esp_hal::gpio::etm::{self, Channels};
 use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2c;
 use esp_hal::i2c::master::I2c;
 use esp_hal::riscv::singleton;
 use esp_hal::rng::Rng;
 use esp_hal::time::Rate;
-use esp_hal::timer::timg::{TimerGroup, etm::Tasks};
+use esp_hal::timer::timg::TimerGroup;
 use panic_rtt_target as _;
-use vl53l1::RangeStatus;
+use static_cell::StaticCell;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
 esp_bootloader_esp_idf::esp_app_desc!();
+
+static INPUT_STREAM: StaticCell<Channel<CriticalSectionRawMutex, InputEvent, 16>> =
+    StaticCell::new();
 
 #[allow(
     clippy::large_stack_frames,
@@ -46,18 +51,37 @@ async fn main(spawner: Spawner) -> ! {
     esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
     info!("Embassy initialized!");
 
+    let input_stream = INPUT_STREAM.init(Channel::new());
+
+    spawner.spawn(
+        run_touch(
+            input_stream.dyn_sender(),
+            peripherals.GPIO16.into(),
+            peripherals.GPIO18.into(), // fl
+            peripherals.GPIO20.into(), // fr
+            peripherals.GPIO19.into(), // rl
+            peripherals.GPIO17.into(), // rr
+            peripherals.GPIO_SD,
+            peripherals.TIMG1,
+            peripherals.ETM,
+        )
+        .expect("run_touch spawn failed"),
+    );
+
+    spawner.spawn(print_inputs(input_stream.dyn_receiver()).unwrap());
+
     let _led = Output::new(peripherals.GPIO15, Level::High, OutputConfig::default());
 
-    let _cap_driver = Output::new(peripherals.GPIO16, Level::High, OutputConfig::default());
-    // let cap_sense = Input::new(peripherals.GPIO18, gpio::InputConfig::default());
-    let gpio_ext = Channels::new(peripherals.GPIO_SD);
-    let cap_sense_event = gpio_ext
-        .channel0_event
-        .rising_edge(peripherals.GPIO17, etm::InputConfig::default());
-    let cap_timer = TimerGroup::new(peripherals.TIMG1).timer0;
-    let cap_timer_task = cap_timer.cnt_stop();
-    let etm = Etm::new(peripherals.ETM);
-    let _cap_timer_etm_channel = etm.channel0.setup(&cap_sense_event, &cap_timer_task);
+    // let _cap_driver = Output::new(peripherals.GPIO16, Level::High, OutputConfig::default());
+    // // let cap_sense = Input::new(peripherals.GPIO18, gpio::InputConfig::default());
+    // let gpio_ext = Channels::new(peripherals.GPIO_SD);
+    // let cap_sense_event = gpio_ext
+    //     .channel0_event
+    //     .rising_edge(peripherals.GPIO17, etm::InputConfig::default());
+    // let cap_timer = TimerGroup::new(peripherals.TIMG1).timer0;
+    // let cap_timer_task = cap_timer.cnt_stop();
+    // let etm = Etm::new(peripherals.ETM);
+    // let _cap_timer_etm_channel = etm.channel0.setup(&cap_sense_event, &cap_timer_task);
 
     let mut i2c = I2c::new(
         peripherals.I2C0,
@@ -94,7 +118,7 @@ async fn main(spawner: Spawner) -> ! {
         .expect("display buf init")
         .as_mut_slice();
 
-    let rng = Rng::new();
+    let _rng = Rng::new();
 
     // TODO: Spawn some tasks
     let _ = spawner;
@@ -110,72 +134,87 @@ async fn main(spawner: Spawner) -> ! {
 
     // loop {}
 
-    let mut was_hand_detected = false;
-    let mut number: usize = 0;
+    let _was_hand_detected = false;
+    let _number: usize = 0;
 
     loop {
-        let start = Instant::now();
-        let measurement = vl53l1::get_ranging_measurement_data(&mut vl53l1_dev, &mut i2c).await;
-        let _delay = start.elapsed().as_micros();
-        // info!("delay: {}", delay);
-
-        let hand_detected = if let Ok(measurement) = measurement {
-            measurement.range_status == RangeStatus::RANGE_VALID
-                && measurement.range_milli_meter < 200
-        } else {
-            false
-        };
-
-        let new_hand_detection = hand_detected && !was_hand_detected;
-
-        if new_hand_detection {
-            number = (rng.random() % 20) as usize;
-        }
-
-        for p in 0..64 {
-            if OCCLUDED_PIXELS_MASK[p] {
-                let mut brightness: u8 = display_buf[p].to_be_bytes()[0];
-
-                if hand_detected {
-                    brightness = brightness.saturating_add(
-                        (rng.random() % if NUMBER_MASKS[number][p] { 100 } else { 25 }) as u8,
-                    );
-                    if brightness > 50 {
-                        brightness = 50;
-                    }
-                } else {
-                    brightness = brightness.saturating_sub(
-                        (rng.random() % if NUMBER_MASKS[number][p] { 2 } else { 10 }) as u8,
-                    );
-                }
-
-                display_buf[p] = u32::from_be_bytes([brightness, brightness, brightness, 0])
-            }
-        }
-        (display, display_buf) = display.transmit(display_buf).await;
-
-        was_hand_detected = hand_detected;
+        info!("Hello!");
+        Timer::after(Duration::from_millis(1000)).await;
     }
 
-    // loop {
-    //     info!("Hello world!");
-    //     led.toggle();
-    //     critical_section::with(|_cs| {
-    //         cap_timer.start();
-    //         cap_timer.reset();
-    //         cap_driver.set_high();
-    //     });
-    //     ETimer::after(Duration::from_millis(100)).await;
-    //     info!(
-    //         "timer: {}",
-    //         cap_timer.now().duration_since_epoch().as_micros()
-    //     );
-    //     cap_driver.set_low();
+    //     let start = Instant::now();
+    //     let measurement = vl53l1::get_ranging_measurement_data(&mut vl53l1_dev, &mut i2c).await;
+    //     let _delay = start.elapsed().as_micros();
+    //     // info!("delay: {}", delay);
 
-    //     // ETimer::after(Duration::from_secs(1)).await;
+    //     let hand_detected = if let Ok(measurement) = measurement {
+    //         measurement.range_status == RangeStatus::RANGE_VALID
+    //             && measurement.range_milli_meter < 200
+    //     } else {
+    //         false
+    //     };
+
+    //     let new_hand_detection = hand_detected && !was_hand_detected;
+
+    //     if new_hand_detection {
+    //         number = (rng.random() % 20) as usize;
+    //     }
+
+    //     for p in 0..64 {
+    //         if OCCLUDED_PIXELS_MASK[p] {
+    //             let mut brightness: u8 = display_buf[p].to_be_bytes()[0];
+
+    //             if hand_detected {
+    //                 brightness = brightness.saturating_add(
+    //                     (rng.random() % if NUMBER_MASKS[number][p] { 100 } else { 25 }) as u8,
+    //                 );
+    //                 if brightness > 50 {
+    //                     brightness = 50;
+    //                 }
+    //             } else {
+    //                 brightness = brightness.saturating_sub(
+    //                     (rng.random() % if NUMBER_MASKS[number][p] { 2 } else { 10 }) as u8,
+    //                 );
+    //             }
+
+    //             display_buf[p] = u32::from_be_bytes([brightness, brightness, brightness, 0])
+    //         }
+    //     }
+    //     (display, display_buf) = display.transmit(display_buf).await;
+
+    //     was_hand_detected = hand_detected;
     // }
 
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.2.2/examples
+    // // loop {
+    // //     info!("Hello world!");
+    // //     led.toggle();
+    // //     critical_section::with(|_cs| {
+    // //         cap_timer.start();
+    // //         cap_timer.reset();
+    // //         cap_driver.set_high();
+    // //     });
+    // //     ETimer::after(Duration::from_millis(100)).await;
+    // //     info!(
+    // //         "timer: {}",
+    // //         cap_timer.now().duration_since_epoch().as_micros()
+    // //     );
+    // //     cap_driver.set_low();
+
+    // //     // ETimer::after(Duration::from_secs(1)).await;
+    // // }
+
+    // // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.2.2/examples
+}
+
+
+#[embassy_executor::task]
+pub async fn print_inputs(
+    input_stream: DynamicReceiver<'static, InputEvent>,
+) {
+    loop {
+
+            info!("Input: {}", input_stream.receive().await);
+    }
 }
 
 #[rustfmt::skip]

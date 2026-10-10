@@ -127,7 +127,7 @@ impl DataIter {
     }
 
     fn reclaim(self) -> &'static mut [u32] {
-        return self.data;
+        self.data
     }
 }
 
@@ -180,7 +180,7 @@ impl PulseIter {
 }
 
 // This would be much lovelier with https://github.com/rust-lang/rfcs/blob/master/text/2071-impl-trait-existential-types.md to just make an iterator with chaining and store the whole unnamed/unnameable type in static memory.
-impl<'a> Iterator for PulseIter {
+impl Iterator for PulseIter {
     type Item = PulseCode;
 
     fn next(&mut self) -> Option<Self::Item> {

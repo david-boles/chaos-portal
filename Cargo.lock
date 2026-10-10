@@ -1850,7 +1850,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vl53l1"
 version = "0.2.0"
-source = "git+https://github.com/david-boles/vl53l1.git#3dfc6cd5e387df525d33f244a899805b3e6ae2f4"
+source = "git+https://github.com/david-boles/vl53l1.git#088ba9194b4c1db1c46200229abfbf639bd05ce9"
 dependencies = [
  "bitfield 0.14.0",
  "defmt 1.1.1",
@@ -1863,7 +1863,7 @@ dependencies = [
 [[package]]
 name = "vl53l1-reg"
 version = "0.2.0"
-source = "git+https://github.com/david-boles/vl53l1.git#3dfc6cd5e387df525d33f244a899805b3e6ae2f4"
+source = "git+https://github.com/david-boles/vl53l1.git#088ba9194b4c1db1c46200229abfbf639bd05ce9"
 dependencies = [
  "bitfield 0.14.0",
  "embedded-hal-async",
